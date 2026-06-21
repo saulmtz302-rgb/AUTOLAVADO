@@ -2,25 +2,22 @@ import streamlit as st
 import pandas as pd
 import datetime
 
-# Configuración inicial de la página
+# Configuración inicial de la página (Regresa a vista expandida por defecto)
 st.set_page_config(page_title="Car Wash Control", page_icon="🧼", layout="wide")
 
-# --- DISEÑO PERSONALIZADO (CSS) PARA CELULARES Y MENÚ ---
+# --- DISEÑO PERSONALIZADO (CSS) OPTIMIZADO PARA PESTAÑAS EN CELULARES ---
 st.html("""
     <style>
-        /* Agranda el título de la barra lateral */
-        [data-testid="stSidebarNav"]::before {
-            font-size: 24px !important;
-        }
-        /* Agranda el texto de las opciones del menú lateral */
-        [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label {
+        /* Hace que las pestañas superiores sean más grandes y fáciles de tocar con el dedo */
+        button[data-baseweb="tab"] {
             font-size: 20px !important;
-            padding-top: 10px !important;
-            padding-bottom: 10px !important;
+            font-weight: bold !important;
+            padding: 12px 20px !important;
         }
-        /* Separación del menú */
-        [data-testid="stSidebar"] .stRadio div[role="radiogroup"] {
-            gap: 12px !important;
+        /* Resalta la pestaña seleccionada con un color azul */
+        button[data-baseweb="tab"][aria-selected="true"] {
+            color: #ff4b4b !important;
+            border-bottom-color: #ff4b4b !important;
         }
         /* Caja o tarjeta responsiva para cada auto en proceso */
         .car-card {
@@ -30,7 +27,7 @@ st.html("""
             margin-bottom: 10px;
             border-left: 5px solid #ff4b4b;
         }
-        /* Modo oscuro compatible para las tarjetas si cambias el tema */
+        /* Modo oscuro compatible para las tarjetas si cambias el tema del celular */
         @media (prefers-color-scheme: dark) {
             .car-card {
                 background-color: #262730;
@@ -40,18 +37,19 @@ st.html("""
     </style>
 """)
 
-# Estructura de navegación en la barra lateral
-st.sidebar.title("🧼 Car Wash Manager")
-opcion = st.sidebar.radio("Selecciona una pantalla:", ["Inicio", "Registro de Servicio", "Reporte de Ventas"])
+# Título principal fijo arriba de la aplicación
+st.title("🧼 Car Wash Manager")
 
 # Inicialización de la base de datos en sesión
 if 'servicios' not in st.session_state:
     st.session_state.servicios = pd.DataFrame(
         columns=["Fecha", "Cliente", "Vehículo", "Placas", "Tipo de Lavado", "Precio ($)", "Estatus"])
 
-# ----------------- PANTALLA: INICIO -----------------
-if opcion == "Inicio":
-    st.title("📊 Panel de Control General")
+# CREACIÓN DE PESTAÑAS SUPERIORES (Sustituye por completo al menú de la izquierda)
+tab_inicio, tab_registro, tab_reportes = st.tabs(["📊 Inicio", "📝 Registro de Servicio", "📈 Reporte de Ventas"])
+
+# ----------------- CONTENIDO PESTAÑA: INICIO -----------------
+with tab_inicio:
     st.write("Bienvenido al sistema de gestión de tu centro de lavado de autos.")
 
     # Métricas clave en tarjetas
@@ -72,11 +70,10 @@ if opcion == "Inicio":
     autos_en_proceso = st.session_state.servicios[st.session_state.servicios["Estatus"] == "En Proceso"]
 
     if not autos_en_proceso.empty:
-        # En lugar de una tabla rota en celular, creamos contenedores móviles individuales
+        # Renderizado de tarjetas responsivas
         for indice, fila in autos_en_proceso.iterrows():
             txt_placas = fila["Placas"].upper() if fila["Placas"] else "SIN PLACAS"
 
-            # Renderiza los datos en formato tarjeta responsiva
             st.html(f"""
                 <div class="car-card">
                     <h3 style='margin:0px;'>🚗 {fila['Vehículo']}</h3>
@@ -85,27 +82,26 @@ if opcion == "Inicio":
                 </div>
             """)
 
-            # Botón grande debajo de la tarjeta para presionar fácilmente con el dedo
-            if st.button(f"✅ Marcar Terminado ({txt_placas})", key=f"btn_mob_{indice}", type="primary",
+            # Botón de ancho completo ideal para pantallas táctiles
+            if st.button(f"✅ Marcar Terminado ({txt_placas})", key=f"btn_tab_{indice}", type="primary",
                          use_container_width=True):
                 st.session_state.servicios.at[indice, "Estatus"] = "Terminado"
                 st.toast(f"¡{fila['Vehículo']} terminado!")
                 st.rerun()
-            st.write("")  # Pequeño espacio de separación
+            st.write("")
     else:
         st.success("¡No hay autos pendientes en este momento!")
 
-    # Mostrar historial general abajo como tabla de respaldo
+    # Historial general abajo como tabla de respaldo
     st.subheader("📋 Historial General del Día")
     if not st.session_state.servicios.empty:
         st.dataframe(st.session_state.servicios, use_container_width=True)
 
-# ----------------- PANTALLA: REGISTRO -----------------
-elif opcion == "Registro de Servicio":
-    st.title("📝 Registrar Nuevo Cliente")
+# ----------------- CONTENIDO PESTAÑA: REGISTRO -----------------
+with tab_registro:
+    st.subheader("📝 Registrar Nuevo Cliente")
 
-    with st.form("form_servicio", clear_on_submit=True):
-        # Campos apilados verticalmente o en dos columnas
+    with st.form("form_servicio_tab", clear_on_submit=True):
         nombre = st.text_input("Nombre del Cliente:")
         vehiculo = st.text_input("Modelo del Vehículo (Ej. Honda Civic Blanco):")
         placas = st.text_input("Número de Placas:")
@@ -133,9 +129,9 @@ elif opcion == "Registro de Servicio":
             else:
                 st.error("Por favor, llena los campos obligatorios (Nombre y Vehículo).")
 
-# ----------------- PANTALLA: REPORTES -----------------
-elif opcion == "Reporte de Ventas":
-    st.title("📈 Reportes de Cierre de Caja")
+# ----------------- CONTENIDO PESTAÑA: REPORTES -----------------
+with tab_reportes:
+    st.subheader("📈 Reportes de Cierre de Caja")
 
     if not st.session_state.servicios.empty:
         st.subheader("Desglose de Ingresos por Tipo de Lavado")
