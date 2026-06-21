@@ -5,31 +5,46 @@ import datetime
 # Configuración inicial de la página
 st.set_page_config(page_title="Car Wash Control", page_icon="🧼", layout="wide")
 
-# --- DISEÑO PERSONALIZADO (CSS) PARA AGRANDAR EL MENÚ LATERAL ---
+# --- DISEÑO PERSONALIZADO (CSS) PARA CELULARES Y MENÚ ---
 st.html("""
     <style>
         /* Agranda el título de la barra lateral */
         [data-testid="stSidebarNav"]::before {
             font-size: 24px !important;
         }
-        /* Agranda el texto de las opciones de radio en la barra lateral */
+        /* Agranda el texto de las opciones del menú lateral */
         [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label {
             font-size: 20px !important;
             padding-top: 10px !important;
             padding-bottom: 10px !important;
         }
-        /* Incrementa el tamaño de los iconos o elementos interactivos adyacentes */
+        /* Separación del menú */
         [data-testid="stSidebar"] .stRadio div[role="radiogroup"] {
             gap: 12px !important;
+        }
+        /* Caja o tarjeta responsiva para cada auto en proceso */
+        .car-card {
+            background-color: #f0f2f6;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            border-left: 5px solid #ff4b4b;
+        }
+        /* Modo oscuro compatible para las tarjetas si cambias el tema */
+        @media (prefers-color-scheme: dark) {
+            .car-card {
+                background-color: #262730;
+                border-left: 5px solid #ff4b4b;
+            }
         }
     </style>
 """)
 
-# Estructura de navegación en la barra lateral (Se eliminó Inventario)
+# Estructura de navegación en la barra lateral
 st.sidebar.title("🧼 Car Wash Manager")
 opcion = st.sidebar.radio("Selecciona una pantalla:", ["Inicio", "Registro de Servicio", "Reporte de Ventas"])
 
-# Inicialización de la base de datos simulada en la sesión de Streamlit
+# Inicialización de la base de datos en sesión
 if 'servicios' not in st.session_state:
     st.session_state.servicios = pd.DataFrame(
         columns=["Fecha", "Cliente", "Vehículo", "Placas", "Tipo de Lavado", "Precio ($)", "Estatus"])
@@ -57,34 +72,30 @@ if opcion == "Inicio":
     autos_en_proceso = st.session_state.servicios[st.session_state.servicios["Estatus"] == "En Proceso"]
 
     if not autos_en_proceso.empty:
-        # Encabezados de la lista
-        enc1, enc2, enc3, enc4, enc5, enc6 = st.columns([2, 2, 1.5, 2, 1.5, 1.5])
-        enc1.markdown("**Cliente**")
-        enc2.markdown("**Vehículo**")
-        enc3.markdown("**Placas**")
-        enc4.markdown("**Tipo**")
-        enc5.markdown("**Precio**")
-        enc6.markdown("**Acción**")
-        st.divider()
-
-        # Iterar sobre cada auto activo
+        # En lugar de una tabla rota en celular, creamos contenedores móviles individuales
         for indice, fila in autos_en_proceso.iterrows():
-            c1, c2, c3, c4, c5, c6 = st.columns([2, 2, 1.5, 2, 1.5, 1.5])
-            c1.write(fila["Cliente"])
-            c2.write(fila["Vehículo"])
-            c3.write(fila["Placas"].upper() if fila["Placas"] else "S/P")
-            c4.write(fila["Tipo de Lavado"])
-            c5.write(f"${fila['Precio ($)']}")
+            txt_placas = fila["Placas"].upper() if fila["Placas"] else "SIN PLACAS"
 
-            # Botón único por fila
-            if c6.button("✅ Terminar", key=f"btn_{indice}", type="primary"):
+            # Renderiza los datos en formato tarjeta responsiva
+            st.html(f"""
+                <div class="car-card">
+                    <h3 style='margin:0px;'>🚗 {fila['Vehículo']}</h3>
+                    <p style='margin:5px 0px;'><b>Placas:</b> {txt_placas} | <b>Cliente:</b> {fila['Cliente']}</p>
+                    <p style='margin:5px 0px;'><b>Servicio:</b> {fila['Tipo de Lavado']} — <span style='color:#25D366; font-weight:bold;'>${fila['Precio ($)']}</span></p>
+                </div>
+            """)
+
+            # Botón grande debajo de la tarjeta para presionar fácilmente con el dedo
+            if st.button(f"✅ Marcar Terminado ({txt_placas})", key=f"btn_mob_{indice}", type="primary",
+                         use_container_width=True):
                 st.session_state.servicios.at[indice, "Estatus"] = "Terminado"
-                st.toast(f"¡{fila['Vehículo']} marcado como Terminado!")
+                st.toast(f"¡{fila['Vehículo']} terminado!")
                 st.rerun()
+            st.write("")  # Pequeño espacio de separación
     else:
         st.success("¡No hay autos pendientes en este momento!")
 
-    # Mostrar historial general abajo solo como lectura
+    # Mostrar historial general abajo como tabla de respaldo
     st.subheader("📋 Historial General del Día")
     if not st.session_state.servicios.empty:
         st.dataframe(st.session_state.servicios, use_container_width=True)
@@ -94,17 +105,15 @@ elif opcion == "Registro de Servicio":
     st.title("📝 Registrar Nuevo Cliente")
 
     with st.form("form_servicio", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            nombre = st.text_input("Nombre del Cliente:")
-            vehiculo = st.text_input("Modelo del Vehículo (Ej. Honda Civic Blanco):")
-            placas = st.text_input("Número de Placas:")
-        with col2:
-            tipo_lavado = st.selectbox("Tipo de Lavado:",
-                                       ["Básico (Exterior)", "Completo (Interior/Exterior)", "Premium (Cera y Motor)"])
-            precio = st.number_input("Precio del Servicio ($):", min_value=0.0, step=10.0, value=150.0)
+        # Campos apilados verticalmente o en dos columnas
+        nombre = st.text_input("Nombre del Cliente:")
+        vehiculo = st.text_input("Modelo del Vehículo (Ej. Honda Civic Blanco):")
+        placas = st.text_input("Número de Placas:")
+        tipo_lavado = st.selectbox("Tipo de Lavado:",
+                                   ["Básico (Exterior)", "Completo (Interior/Exterior)", "Premium (Cera y Motor)"])
+        precio = st.number_input("Precio del Servicio ($):", min_value=0.0, step=10.0, value=150.0)
 
-        guardar = st.form_submit_button("Registrar Entrada")
+        guardar = st.form_submit_button("Registrar Entrada", use_container_width=True)
 
         if guardar:
             if nombre and vehiculo:
@@ -119,7 +128,8 @@ elif opcion == "Registro de Servicio":
                 }
                 st.session_state.servicios = pd.concat([st.session_state.servicios, pd.DataFrame([nuevo_servicio])],
                                                        ignore_index=True)
-                st.success(f"¡Vehículo {vehiculo} [{placas.upper()}] registrado con éxito!")
+                st.success(f"¡Vehículo {vehiculo} registrado con éxito!")
+                st.rerun()
             else:
                 st.error("Por favor, llena los campos obligatorios (Nombre y Vehículo).")
 
