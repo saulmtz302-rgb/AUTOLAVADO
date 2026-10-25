@@ -101,15 +101,20 @@ st.html("""
 """)
 
 # --- CABECERA CON LOGOTIPO Y TÍTULO ---
-col_logo, col_titulo = st.columns([1, 4])
-with col_logo:
-    if os.path.exists("logo.png"):
-        st.image("logo.png", width=180)
-    else:
-        st.markdown("🧼")
-with col_titulo:
-    st.title("RaceWash Manager")
-    st.caption("Sistema de control y sincronización en tiempo real")
+import os
+
+# --- CARGA INTELIGENTE DEL LOGO ---
+# Busca el logo tanto si estás en local como si estás en Render
+if os.path.exists("main/logo.png"):
+    ruta_logo = "main/logo.png"
+elif os.path.exists("logo.png"):
+    ruta_logo = "logo.png"
+else:
+    ruta_logo = None
+
+# Muestra el logo si lo encuentra
+if ruta_logo:
+    st.image(ruta_logo, width=200) # Puedes ajustar el ancho a tu gusto
 
 # Inicializar datos en la sesión desde Google Sheets
 if 'servicios' not in st.session_state:
