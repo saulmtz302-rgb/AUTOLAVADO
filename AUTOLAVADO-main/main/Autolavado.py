@@ -131,7 +131,14 @@ tab_registro, tab_inicio, tab_reportes = st.tabs(
 with tab_registro:
     st.subheader("📝 Registrar Nuevo Servicio (RaceWash)")
 
-    # Catálogo actualizado incluyendo Motos y Extras / Servicios especiales
+    # 1. Verificamos al inicio si hay una orden de limpiar los campos pendiente
+    if st.session_state.get('limpiar_pendientes', False):
+        st.session_state.input_nombre = ""
+        st.session_state.input_vehiculo = ""
+        st.session_state.input_placas = ""
+        st.session_state.limpiar_pendientes = False
+
+    # 📌 2. Diccionario de precios (Asegúrate de tenerlo aquí)
     precios_catalogo = {
         ("Auto chico / Sedán", "Básico"): 140.0,
         ("Auto chico / Sedán", "Race"): 200.0,
@@ -146,6 +153,7 @@ with tab_registro:
         ("Extra / Servicio Adicional", "Lavado de Interiores"): 300.0,
     }
 
+    # 3. Controles de selección de tipo y paquete
     tipo_vehiculo = st.selectbox("Tipo de Vehículo / Servicio:", [
         "Auto chico / Sedán",
         "Camionetas / SUV",
@@ -154,7 +162,6 @@ with tab_registro:
         "Extra / Servicio Adicional"
     ])
 
-    # Opciones dinámicas según la categoría seleccionada
     if tipo_vehiculo == "Taxi":
         paquetes_disponibles = ["Paquete Básico"]
     elif tipo_vehiculo == "Moto":
@@ -166,9 +173,9 @@ with tab_registro:
 
     paquete_seleccionado = st.selectbox("Selecciona el Paquete / Opción:", paquetes_disponibles)
 
+    # Aquí es donde busca en el diccionario que acabamos de definir arriba
     precio_automatico = precios_catalogo.get((tipo_vehiculo, paquete_seleccionado), 150.0)
-
-    # Campos de texto enlazados a session_state
+    # 3. Campos de texto enlazados a session_state
     nombre = st.text_input("Nombre del Cliente:", key="input_nombre")
     vehiculo = st.text_input("Modelo del Vehículo / Descripción (Ej. Jetta Negro / Moto Italika):", key="input_vehiculo")
     placas = st.text_input("Número de Placas:", key="input_placas")
@@ -186,12 +193,10 @@ with tab_registro:
 
     # Lógica del botón Limpiar
     if limpiar:
-        st.session_state.input_nombre = ""
-        st.session_state.input_vehiculo = ""
-        st.session_state.input_placas = ""
+        st.session_state.limpiar_pendientes = True
         st.rerun()
 
-        # Lógica del botón Registrar
+    # Lógica del botón Registrar
     if registrar:
         if nombre and vehiculo:
             detalle_lavado = f"{tipo_vehiculo} - {paquete_seleccionado}"
@@ -209,18 +214,13 @@ with tab_registro:
             agregar_fila_a_sheets(nuevo_registro)
             st.session_state.servicios = cargar_datos()
 
-            # Limpiamos las variables de sesión ANTES de que se vuelva a pintar la página
-            st.session_state.input_nombre = ""
-            st.session_state.input_vehiculo = ""
-            st.session_state.input_placas = ""
+            # Activamos la bandera para que en la próxima recarga los inputs nazcan vacíos
+            st.session_state.limpiar_pendientes = True
 
             st.success(f"¡Servicio para {vehiculo} registrado con éxito en la nube!")
-
-            # Recargamos la página limpiamente
             st.rerun()
         else:
             st.error("Por favor, llena los campos obligatorios (Nombre y Vehículo).")
-
 # ----------------- CONTENIDO PESTAÑA: INICIO (FILTRADO HOY) -----------------
 with tab_inicio:
     st.subheader(f"📊 Resumen del Día: {datetime.date.today().strftime('%d/%m/%Y')}")
