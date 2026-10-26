@@ -191,7 +191,7 @@ with tab_registro:
         st.session_state.input_placas = ""
         st.rerun()
 
-    # Lógica del botón Registrar
+        # Lógica del botón Registrar
     if registrar:
         if nombre and vehiculo:
             detalle_lavado = f"{tipo_vehiculo} - {paquete_seleccionado}"
@@ -209,12 +209,14 @@ with tab_registro:
             agregar_fila_a_sheets(nuevo_registro)
             st.session_state.servicios = cargar_datos()
 
-            # Limpiar campos tras un registro exitoso
+            # Limpiamos las variables de sesión ANTES de que se vuelva a pintar la página
             st.session_state.input_nombre = ""
             st.session_state.input_vehiculo = ""
             st.session_state.input_placas = ""
 
             st.success(f"¡Servicio para {vehiculo} registrado con éxito en la nube!")
+
+            # Recargamos la página limpiamente
             st.rerun()
         else:
             st.error("Por favor, llena los campos obligatorios (Nombre y Vehículo).")
