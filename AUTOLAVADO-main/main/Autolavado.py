@@ -257,15 +257,17 @@ with tab_inicio:
 
     if not autos_en_proceso_hoy.empty:
         for indice_real, fila in autos_en_proceso_hoy.iterrows():
-            txt_placas = fila["Placas"].upper() if pd.notna(fila["Placas"]) and fila["Placas"] else "SIN PLACAS"
+            # Convertimos a string primero para evitar errores si la placa es un número
+            placa_val = str(fila["Placas"]).strip() if pd.notna(fila["Placas"]) else ""
+            txt_placas = placa_val.upper() if placa_val != "" else "SIN PLACAS"
 
             st.html(f"""
-                <div class="car-card">
-                    <h3 style='margin:0px;'>🚗 {fila['Vehículo']}</h3>
-                    <p style='margin:5px 0px;'><b>Placas:</b> {txt_placas} | <b>Cliente:</b> {fila['Cliente']}</p>
-                    <p style='margin:5px 0px;'><b>Servicio:</b> {fila['Tipo de Lavado']} — <span style='color:#25D366; font-weight:bold;'>${fila['Precio ($)']}</span></p>
-                </div>
-            """)
+                    <div class="car-card">
+                        <h3 style='margin:0px;'>🚗 {fila['Vehículo']}</h3>
+                        <p style='margin:5px 0px;'><b>Placas:</b> {txt_placas} | <b>Cliente:</b> {fila['Cliente']}</p>
+                        <p style='margin:5px 0px;'><b>Servicio:</b> {fila['Tipo de Lavado']} — <span style='color:#25D366; font-weight:bold;'>${fila['Precio ($)']}</span></p>
+                    </div>
+                """)
 
             if st.button(f"✅ Marcar Terminado ({txt_placas})", key=f"btn_tab_{indice_real}", type="primary",
                          use_container_width=True):
