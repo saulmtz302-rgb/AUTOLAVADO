@@ -100,11 +100,7 @@ st.html("""
     </style>
 """)
 
-# --- CABECERA CON LOGOTIPO Y TÍTULO ---
-import os
-
 # --- CARGA INTELIGENTE DEL LOGO ---
-# Busca el logo tanto si estás en local como si estás en Render
 if os.path.exists("main/logo.png"):
     ruta_logo = "main/logo.png"
 elif os.path.exists("logo.png"):
@@ -112,15 +108,14 @@ elif os.path.exists("logo.png"):
 else:
     ruta_logo = None
 
-# Muestra el logo si lo encuentra
 if ruta_logo:
-    st.image(ruta_logo, width=200) # Puedes ajustar el ancho a tu gusto
+    st.image(ruta_logo, width=200)
 
 # Inicializar datos en la sesión desde Google Sheets
 if 'servicios' not in st.session_state:
     st.session_state.servicios = cargar_datos()
 
-# Inicializar las variables de los inputs del formulario para poder limpiarlas
+# Inicializar las variables de los inputs del formulario
 if 'input_nombre' not in st.session_state:
     st.session_state.input_nombre = ""
 if 'input_vehiculo' not in st.session_state:
@@ -128,7 +123,7 @@ if 'input_vehiculo' not in st.session_state:
 if 'input_placas' not in st.session_state:
     st.session_state.input_placas = ""
 
-# CREACIÓN DE PESTAÑAS (Inicia en Registro de Servicio)
+# CREACIÓN DE PESTAÑAS
 tab_registro, tab_inicio, tab_reportes = st.tabs(
     ["📝 Registro de Servicio", "📊 Inicio (Día de Hoy)", "📈 Reporte de Ventas"])
 
@@ -136,6 +131,7 @@ tab_registro, tab_inicio, tab_reportes = st.tabs(
 with tab_registro:
     st.subheader("📝 Registrar Nuevo Servicio (RaceWash)")
 
+    # Catálogo actualizado incluyendo Motos y Extras / Servicios especiales
     precios_catalogo = {
         ("Auto chico / Sedán", "Básico"): 140.0,
         ("Auto chico / Sedán", "Race"): 200.0,
@@ -144,23 +140,37 @@ with tab_registro:
         ("Camionetas / SUV", "Race"): 250.0,
         ("Camionetas / SUV", "Premium"): 400.0,
         ("Taxi", "Paquete Básico"): 100.0,
+        ("Moto", "Básico Moto"): 80.0,
+        ("Moto", "Lavado Especial Moto"): 130.0,
+        ("Extra / Servicio Adicional", "Detallado"): 500.0,
+        ("Extra / Servicio Adicional", "Lavado de Interiores"): 300.0,
     }
 
-    # Controles de selección de tipo y paquete fuera del formulario para el cálculo dinámico del precio
-    tipo_vehiculo = st.selectbox("Tipo de Vehículo:", ["Auto chico / Sedán", "Camionetas / SUV", "Taxi"])
+    tipo_vehiculo = st.selectbox("Tipo de Vehículo / Servicio:", [
+        "Auto chico / Sedán",
+        "Camionetas / SUV",
+        "Taxi",
+        "Moto",
+        "Extra / Servicio Adicional"
+    ])
 
+    # Opciones dinámicas según la categoría seleccionada
     if tipo_vehiculo == "Taxi":
         paquetes_disponibles = ["Paquete Básico"]
+    elif tipo_vehiculo == "Moto":
+        paquetes_disponibles = ["Básico Moto", "Lavado Especial Moto"]
+    elif tipo_vehiculo == "Extra / Servicio Adicional":
+        paquetes_disponibles = ["Detallado", "Lavado de Interiores"]
     else:
         paquetes_disponibles = ["Básico", "Race", "Premium"]
 
-    paquete_seleccionado = st.selectbox("Selecciona el Paquete:", paquetes_disponibles)
+    paquete_seleccionado = st.selectbox("Selecciona el Paquete / Opción:", paquetes_disponibles)
 
     precio_automatico = precios_catalogo.get((tipo_vehiculo, paquete_seleccionado), 150.0)
 
     # Campos de texto enlazados a session_state
     nombre = st.text_input("Nombre del Cliente:", key="input_nombre")
-    vehiculo = st.text_input("Modelo del Vehículo (Ej. Jetta Negro):", key="input_vehiculo")
+    vehiculo = st.text_input("Modelo del Vehículo / Descripción (Ej. Jetta Negro / Moto Italika):", key="input_vehiculo")
     placas = st.text_input("Número de Placas:", key="input_placas")
 
     precio = st.number_input("Precio del Servicio ($):", min_value=0.0, step=10.0, value=precio_automatico)
@@ -186,7 +196,7 @@ with tab_registro:
         if nombre and vehiculo:
             detalle_lavado = f"{tipo_vehiculo} - {paquete_seleccionado}"
 
-            nuevo_servicio = {
+            nuevo_registro = {
                 "Fecha": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
                 "Cliente": nombre,
                 "Vehículo": vehiculo,
@@ -196,7 +206,7 @@ with tab_registro:
                 "Estatus": "En Proceso"
             }
 
-            agregar_fila_a_sheets(nuevo_servicio)
+            agregar_fila_a_sheets(nuevo_registro)
             st.session_state.servicios = cargar_datos()
 
             # Limpiar campos tras un registro exitoso
@@ -204,7 +214,7 @@ with tab_registro:
             st.session_state.input_vehiculo = ""
             st.session_state.input_placas = ""
 
-            st.success(f"¡Vehículo {vehiculo} registrado con éxito en la nube!")
+            st.success(f"¡Servicio para {vehiculo} registrado con éxito en la nube!")
             st.rerun()
         else:
             st.error("Por favor, llena los campos obligatorios (Nombre y Vehículo).")
@@ -234,9 +244,9 @@ with tab_inicio:
             pendientes_hoy = len(df_hoy[df_hoy["Estatus"] == "En Proceso"])
         else:
             pendientes_hoy = 0
-        st.metric(label="Autos Pendientes Hoy", value=pendientes_hoy)
+        st.metric(label="Servicios Pendientes Hoy", value=pendientes_hoy)
 
-    st.subheader("🚗 Autos en Lavado Hoy (En Proceso)")
+    st.subheader("🚗 Servicios en Proceso Hoy")
 
     if not df_hoy.empty and "Estatus" in df_hoy.columns:
         autos_en_proceso_hoy = df_hoy[df_hoy["Estatus"] == "En Proceso"]
@@ -251,7 +261,7 @@ with tab_inicio:
                 <div class="car-card">
                     <h3 style='margin:0px;'>🚗 {fila['Vehículo']}</h3>
                     <p style='margin:5px 0px;'><b>Placas:</b> {txt_placas} | <b>Cliente:</b> {fila['Cliente']}</p>
-                    <p style='margin:5px 0px;'><b>Paquete:</b> {fila['Tipo de Lavado']} — <span style='color:#25D366; font-weight:bold;'>${fila['Precio ($)']}</span></p>
+                    <p style='margin:5px 0px;'><b>Servicio:</b> {fila['Tipo de Lavado']} — <span style='color:#25D366; font-weight:bold;'>${fila['Precio ($)']}</span></p>
                 </div>
             """)
 
@@ -263,7 +273,7 @@ with tab_inicio:
                 st.rerun()
             st.write("")
     else:
-        st.success("¡No hay autos pendientes para el día de hoy!")
+        st.success("¡No hay servicios pendientes para el día de hoy!")
 
     st.subheader("📋 Historial del Día")
     if not df_hoy.empty:
@@ -286,7 +296,7 @@ with tab_reportes:
             if "Fecha_Solo" in df_reporte.columns:
                 df_reporte = df_reporte.drop(columns=["Fecha_Solo"])
 
-        st.subheader("Desglose de Ingresos por Paquete")
+        st.subheader("Desglose de Ingresos por Tipo de Servicio")
         df_temp = df_reporte.copy()
         df_temp["Precio ($)"] = pd.to_numeric(df_temp["Precio ($)"])
         resumen = df_temp.groupby("Tipo de Lavado")["Precio ($)"].sum().reset_index()
@@ -299,7 +309,7 @@ with tab_reportes:
         st.download_button(
             label="📥 Descargar Reporte en CSV",
             data=csv_data,
-            file_name=f"reporte_raceva_wash_{datetime.date.today()}.csv",
+            file_name=f"reporte_racewash_{datetime.date.today()}.csv",
             mime="text/csv",
             use_container_width=True,
         )
