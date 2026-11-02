@@ -72,6 +72,36 @@ def agregar_fila_a_sheets(nuevo_registro):
         st.error(f"Error al guardar el registro en Google Sheets: {e}")
 
 
+# --- ELIMINAR REGISTRO EN GOOGLE SHEETS ---
+def eliminar_fila_en_sheets(indice_real):
+    try:
+        sheet = conectar_google_sheets()
+        fila_excel = indice_real + 2  # +2 por los encabezados y filas de Excel
+        sheet.delete_rows(fila_excel)
+    except Exception as e:
+        st.error(f"Error al eliminar de Google Sheets: {e}")
+
+
+# --- EDITAR REGISTRO COMPLETO EN GOOGLE SHEETS ---
+def actualizar_registro_en_sheets(indice_real, datos_actualizados):
+    try:
+        sheet = conectar_google_sheets()
+        fila_excel = indice_real + 2
+        rango = f"A{fila_excel}:G{fila_excel}"
+        fila = [
+            datos_actualizados["Fecha"],
+            datos_actualizados["Cliente"],
+            datos_actualizados["Vehículo"],
+            datos_actualizados["Placas"],
+            datos_actualizados["Tipo de Lavado"],
+            datos_actualizados["Precio ($)"],
+            datos_actualizados["Estatus"]
+        ]
+        sheet.update(rango, [fila])
+    except Exception as e:
+        st.error(f"Error al actualizar el registro en Google Sheets: {e}")
+
+
 # --- DISEÑO PERSONALIZADO (CSS) ---
 st.html("""
     <style>
@@ -138,7 +168,7 @@ with tab_registro:
         st.session_state.input_placas = ""
         st.session_state.limpiar_pendientes = False
 
-    # 📌 2. Diccionario de precios (Asegúrate de tenerlo aquí)
+    # 📌 2. Diccionario de precios
     precios_catalogo = {
         ("Auto chico / Sedán", "Básico"): 140.0,
         ("Auto chico / Sedán", "Race"): 200.0,
@@ -173,11 +203,12 @@ with tab_registro:
 
     paquete_seleccionado = st.selectbox("Selecciona el Paquete / Opción:", paquetes_disponibles)
 
-    # Aquí es donde busca en el diccionario que acabamos de definir arriba
     precio_automatico = precios_catalogo.get((tipo_vehiculo, paquete_seleccionado), 150.0)
-    # 3. Campos de texto enlazados a session_state
+
+    # Campos de texto enlazados a session_state
     nombre = st.text_input("Nombre del Cliente:", key="input_nombre")
-    vehiculo = st.text_input("Modelo del Vehículo / Descripción (Ej. Jetta Negro / Moto Italika):", key="input_vehiculo")
+    vehiculo = st.text_input("Modelo del Vehículo / Descripción (Ej. Jetta Negro / Moto Italika):",
+                             key="input_vehiculo")
     placas = st.text_input("Número de Placas:", key="input_placas")
 
     precio = st.number_input("Precio del Servicio ($):", min_value=0.0, step=10.0, value=precio_automatico)
@@ -214,13 +245,13 @@ with tab_registro:
             agregar_fila_a_sheets(nuevo_registro)
             st.session_state.servicios = cargar_datos()
 
-            # Activamos la bandera para que en la próxima recarga los inputs nazcan vacíos
             st.session_state.limpiar_pendientes = True
 
             st.success(f"¡Servicio para {vehiculo} registrado con éxito en la nube!")
             st.rerun()
         else:
             st.error("Por favor, llena los campos obligatorios (Nombre y Vehículo).")
+
 # ----------------- CONTENIDO PESTAÑA: INICIO (FILTRADO HOY) -----------------
 with tab_inicio:
     st.subheader(f"📊 Resumen del Día: {datetime.date.today().strftime('%d/%m/%Y')}")
@@ -257,25 +288,99 @@ with tab_inicio:
 
     if not autos_en_proceso_hoy.empty:
         for indice_real, fila in autos_en_proceso_hoy.iterrows():
-            # Convertimos a string primero para evitar errores si la placa es un número
             placa_val = str(fila["Placas"]).strip() if pd.notna(fila["Placas"]) else ""
             txt_placas = placa_val.upper() if placa_val != "" else "SIN PLACAS"
 
+            # 1. Tarjeta visual del auto
             st.html(f"""
-                    <div class="car-card">
-                        <h3 style='margin:0px;'>🚗 {fila['Vehículo']}</h3>
-                        <p style='margin:5px 0px;'><b>Placas:</b> {txt_placas} | <b>Cliente:</b> {fila['Cliente']}</p>
-                        <p style='margin:5px 0px;'><b>Servicio:</b> {fila['Tipo de Lavado']} — <span style='color:#25D366; font-weight:bold;'>${fila['Precio ($)']}</span></p>
-                    </div>
-                """)
+                        <div class="car-card">
+                            <h3 style='margin:0px;'>🚗 {fila['Vehículo']}</h3>
+                            <p style='margin:5px 0px;'><b>Placas:</b> {txt_placas} | <b>Cliente:</b> {fila['Cliente']}</p>
+                            <p style='margin:5px 0px;'><b>Servicio:</b> {fila['Tipo de Lavado']} — <span style='color:#25D366; font-weight:bold;'>${fila['Precio ($)']}</span></p>
+                        </div>
+                    """)
 
+            # 2. ➕ Agregar Servicio Extra sin reescribir datos
+            with st.expander(f"➕ Agregar Servicio Extra a {txt_placas}"):
+                extra_seleccionado = st.selectbox(
+                    "Selecciona el extra:",
+                    ["Lavado de Interiores", "Detallado", "Cera Rápida", "Motor"],
+                    key=f"sel_extra_{indice_real}"
+                )
+
+                precios_extras = {
+                    "Lavado de Interiores": 300.0,
+                    "Detallado": 500.0,
+                    "Cera Rápida": 100.0,
+                    "Motor": 150.0
+                }
+                precio_extra_sugerido = precios_extras.get(extra_seleccionado, 100.0)
+
+                costo_extra = st.number_input(
+                    "Costo del Extra ($):",
+                    value=precio_extra_sugerido,
+                    step=50.0,
+                    key=f"input_extra_{indice_real}"
+                )
+
+                if st.button(f"Confirmar y Sumar Extra", key=f"btn_confirmar_extra_{indice_real}",
+                             use_container_width=True):
+                    nuevo_tipo_lavado = f"{fila['Tipo de Lavado']} + {extra_seleccionado}"
+                    nuevo_precio = float(fila["Precio ($)"]) + costo_extra
+
+                    st.session_state.servicios.at[indice_real, "Tipo de Lavado"] = nuevo_tipo_lavado
+                    st.session_state.servicios.at[indice_real, "Precio ($)"] = nuevo_precio
+
+                    sheet = conectar_google_sheets()
+                    fila_excel = indice_real + 2
+                    sheet.update_cell(fila_excel, 5, nuevo_tipo_lavado)
+                    sheet.update_cell(fila_excel, 6, nuevo_precio)
+
+                    st.toast(f"¡Extra '{extra_seleccionado}' agregado con éxito!")
+                    st.rerun()
+
+            # 3. ⚙️ Editar o Eliminar Registro
+            with st.expander(f"⚙️ Editar o Eliminar ({txt_placas})"):
+                nuevo_cliente = st.text_input("Editar Cliente:", value=str(fila['Cliente']),
+                                              key=f"edit_cli_{indice_real}")
+                nuevo_vehiculo = st.text_input("Editar Vehículo:", value=str(fila['Vehículo']),
+                                               key=f"edit_veh_{indice_real}")
+                nuevas_placas = st.text_input("Editar Placas:", value=txt_placas, key=f"edit_pla_{indice_real}")
+                nuevo_precio = st.number_input("Editar Precio ($):", value=float(fila['Precio ($)']), step=10.0,
+                                               key=f"edit_precio_{indice_real}")
+
+                col_ed1, col_ed2 = st.columns(2)
+
+                with col_ed1:
+                    if st.button("💾 Guardar Cambios", key=f"btn_guardar_{indice_real}", use_container_width=True):
+                        st.session_state.servicios.at[indice_real, "Cliente"] = nuevo_cliente
+                        st.session_state.servicios.at[indice_real, "Vehículo"] = nuevo_vehiculo
+                        st.session_state.servicios.at[indice_real, "Placas"] = nuevas_placas.upper()
+                        st.session_state.servicios.at[indice_real, "Precio ($)"] = nuevo_precio
+
+                        datos_act = st.session_state.servicios.loc[indice_real].to_dict()
+                        actualizar_registro_en_sheets(indice_real, datos_act)
+
+                        st.toast("¡Registro actualizado con éxito!")
+                        st.rerun()
+
+                with col_ed2:
+                    if st.button("🗑️ Eliminar Registro", key=f"btn_del_{indice_real}", use_container_width=True):
+                        st.session_state.servicios = st.session_state.servicios.drop(indice_real).reset_index(drop=True)
+                        eliminar_fila_en_sheets(indice_real)
+
+                        st.toast("¡Registro eliminado correctamente!")
+                        st.rerun()
+
+            # 4. Botón tradicional para marcar terminado
             if st.button(f"✅ Marcar Terminado ({txt_placas})", key=f"btn_tab_{indice_real}", type="primary",
                          use_container_width=True):
                 st.session_state.servicios.at[indice_real, "Estatus"] = "Terminado"
                 guardar_estatus_en_sheets(indice_real, "Terminado")
                 st.toast(f"¡{fila['Vehículo']} terminado y sincronizado!")
                 st.rerun()
-            st.write("")
+
+            st.write("---")
     else:
         st.success("¡No hay servicios pendientes para el día de hoy!")
 
