@@ -300,44 +300,44 @@ with tab_inicio:
                         </div>
                     """)
 
-            # 2. ➕ Agregar Servicio Extra sin reescribir datos
+            # 2. ➕ Agregar Servicio Extra Personalizado (Texto libre y Precio)
             with st.expander(f"➕ Agregar Servicio Extra a {txt_placas}"):
-                extra_seleccionado = st.selectbox(
-                    "Selecciona el extra:",
-                    ["Lavado de Interiores", "Detallado", "Cera Rápida", "Motor"],
-                    key=f"sel_extra_{indice_real}"
+                # Campo de texto libre para escribir cualquier extra personalizado
+                extra_personalizado = st.text_input(
+                    "Nombre del Extra (Ej. Polish, Faros, etc.):",
+                    value="",
+                    key=f"input_extra_texto_{indice_real}"
                 )
-
-                precios_extras = {
-                    "Lavado de Interiores": 300.0,
-                    "Detallado": 500.0,
-                    "Cera Rápida": 100.0,
-                    "Motor": 150.0
-                }
-                precio_extra_sugerido = precios_extras.get(extra_seleccionado, 100.0)
 
                 costo_extra = st.number_input(
                     "Costo del Extra ($):",
-                    value=precio_extra_sugerido,
+                    min_value=0.0,
+                    value=100.0,
                     step=50.0,
-                    key=f"input_extra_{indice_real}"
+                    key=f"input_extra_precio_{indice_real}"
                 )
 
                 if st.button(f"Confirmar y Sumar Extra", key=f"btn_confirmar_extra_{indice_real}",
                              use_container_width=True):
-                    nuevo_tipo_lavado = f"{fila['Tipo de Lavado']} + {extra_seleccionado}"
-                    nuevo_precio = float(fila["Precio ($)"]) + costo_extra
+                    if extra_personalizado.strip() != "":
+                        # Actualizamos el tipo de lavado sumando lo que tú escribiste
+                        nuevo_tipo_lavado = f"{fila['Tipo de Lavado']} + {extra_personalizado.strip()}"
+                        nuevo_precio = float(fila["Precio ($)"]) + costo_extra
 
-                    st.session_state.servicios.at[indice_real, "Tipo de Lavado"] = nuevo_tipo_lavado
-                    st.session_state.servicios.at[indice_real, "Precio ($)"] = nuevo_precio
+                        # Actualizamos en el DataFrame de sesión
+                        st.session_state.servicios.at[indice_real, "Tipo de Lavado"] = nuevo_tipo_lavado
+                        st.session_state.servicios.at[indice_real, "Precio ($)"] = nuevo_precio
 
-                    sheet = conectar_google_sheets()
-                    fila_excel = indice_real + 2
-                    sheet.update_cell(fila_excel, 5, nuevo_tipo_lavado)
-                    sheet.update_cell(fila_excel, 6, nuevo_precio)
+                        # Sincronizamos con Google Sheets
+                        sheet = conectar_google_sheets()
+                        fila_excel = indice_real + 2
+                        sheet.update_cell(fila_excel, 5, nuevo_tipo_lavado)
+                        sheet.update_cell(fila_excel, 6, nuevo_precio)
 
-                    st.toast(f"¡Extra '{extra_seleccionado}' agregado con éxito!")
-                    st.rerun()
+                        st.toast(f"¡Extra '{extra_personalizado}' agregado con éxito!")
+                        st.rerun()
+                    else:
+                        st.error("Por favor, escribe el nombre del servicio extra.")
 
             # 3. ⚙️ Editar o Eliminar Registro
             with st.expander(f"⚙️ Editar o Eliminar ({txt_placas})"):
