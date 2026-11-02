@@ -384,10 +384,51 @@ with tab_inicio:
     else:
         st.success("¡No hay servicios pendientes para el día de hoy!")
 
-    st.subheader("📋 Historial del Día")
+    st.subheader("📋 Historial del Día (Editable)")
     if not df_hoy.empty:
+        # Preparamos la tabla sin la columna auxiliar de fecha corta
         tabla_mostrar = df_hoy.drop(columns=["Fecha_Solo"])
-        st.dataframe(tabla_mostrar, use_container_width=True)
+
+        # 📊 st.data_editor permite modificar celdas directamente en pantalla
+        df_editado = st.data_editor(
+            tabla_mostrar,
+            key="editor_historial_hoy",
+            use_container_width=True,
+            hide_index=True
+        )
+
+        # Botón para guardar los cambios hechos en la tabla hacia Google Sheets
+        if st.button("💾 Guardar Cambios de la Tabla en la Nube", use_container_width=True):
+            try:
+                sheet = conectar_google_sheets()
+
+                # Actualizamos el DataFrame principal en la sesión con los datos editados
+                for idx in df_editado.index:
+                    st.session_state.servicios.loc[idx, "Cliente"] = df_editado.loc[idx, "Cliente"]
+                    st.session_state.servicios.loc[idx, "Vehículo"] = df_editado.loc[idx, "Vehículo"]
+                    st.session_state.servicios.loc[idx, "Placas"] = str(df_editado.loc[idx, "Placas"]).upper()
+                    st.session_state.servicios.loc[idx, "Tipo de Lavado"] = df_editado.loc[idx, "Tipo de Lavado"]
+                    st.session_state.servicios.loc[idx, "Precio ($)"] = float(df_editado.loc[idx, "Precio ($)"])
+                    st.session_state.servicios.loc[idx, "Estatus"] = df_editado.loc[idx, "Estatus"]
+
+                    # Sincronizamos fila por fila en Google Sheets (fila real = índice + 2)
+                    fila_excel = idx + 2
+                    rango = f"A{fila_excel}:G{fila_excel}"
+                    fila_valores = [
+                        str(st.session_state.servicios.loc[idx, "Fecha"]),
+                        str(st.session_state.servicios.loc[idx, "Cliente"]),
+                        str(st.session_state.servicios.loc[idx, "Vehículo"]),
+                        str(st.session_state.servicios.loc[idx, "Placas"]),
+                        str(st.session_state.servicios.loc[idx, "Tipo de Lavado"]),
+                        float(st.session_state.servicios.loc[idx, "Precio ($)"]),
+                        str(st.session_state.servicios.loc[idx, "Estatus"])
+                    ]
+                    sheet.update(rango, [fila_valores])
+
+                st.toast("¡Historial actualizado y sincronizado en la nube con éxito!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error al guardar los cambios de la tabla: {e}")
     else:
         st.info("Aún no hay registros para el día de hoy.")
 
