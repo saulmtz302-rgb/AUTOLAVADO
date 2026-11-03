@@ -518,41 +518,60 @@ with tab_egresos:
 # =========================================================
 # 4. CONTENIDO PESTAÑA: REPORTES Y CAJA
 # =========================================================
+# =========================================================
+# 4. CONTENIDO PESTAÑA: REPORTES Y CAJA
+# =========================================================
 with tab_reportes:
-    st.subheader("📈 Reportes Generales, Ingresos, Egresos y Utilidad Neta")
+    st.subheader("📈 Reportes, Ingresos, Egresos y Corte por Fecha")
 
     if not st.session_state.servicios.empty or not st.session_state.egresos.empty:
-        ver_todo = st.checkbox("Mostrar todo el historial histórico acumulado", value=True)
 
-        if ver_todo:
-            df_reporte_ingresos = st.session_state.servicios.copy()
-            df_reporte_egresos = st.session_state.egresos.copy()
-        else:
-            df_reporte_ingresos = df_hoy.copy()
-            if "Fecha_Solo" in df_reporte_ingresos.columns:
-                df_reporte_ingresos = df_reporte_ingresos.drop(columns=["Fecha_Solo"])
+        # Opciones de visualización
+        modo_filtro = st.radio(
+            "Selecciona el modo de vista:",
+            ["📅 Ver un día específico", "📊 Historial acumulado (Todo)"],
+            horizontal=True
+        )
 
-            # Filtrar egresos también por el día de hoy si no se ve todo
-            if not st.session_state.egresos.empty:
-                df_egresos_temp = st.session_state.egresos.copy()
-                df_egresos_temp["Fecha_Solo"] = df_egresos_temp["Fecha"].astype(str).str.slice(0, 10)
-                df_reporte_egresos = df_egresos_temp[df_egresos_temp["Fecha_Solo"] == hoy_str].drop(
-                    columns=["Fecha_Solo"])
-            else:
-                df_reporte_egresos = pd.DataFrame(columns=["Fecha", "Concepto", "Monto ($)"])
+        df_reporte_ingresos = st.session_state.servicios.copy()
+        df_reporte_egresos = st.session_state.egresos.copy()
 
-        # Cálculos de Totales
-        total_ingresos = pd.to_numeric(
-            df_reporte_ingresos["Precio ($)"]).sum() if not df_reporte_ingresos.empty else 0.0
-        total_egresos = pd.to_numeric(df_reporte_egresos["Monto ($)"]).sum() if not df_reporte_egresos.empty else 0.0
+        # Preparar columna de solo fecha para los filtros
+        if not df_reporte_ingresos.empty:
+            df_reporte_ingresos["Fecha_Solo"] = df_reporte_ingresos["Fecha"].astype(str).str.slice(0, 10)
+        if not df_reporte_egresos.empty:
+            df_reporte_egresos["Fecha_Solo"] = df_reporte_egresos["Fecha"].astype(str).str.slice(0, 10)
+
+        # Filtrar según la opción elegida
+        if modo_filtro == "📅 Ver un día específico":
+            horario_mex_actual = datetime.datetime.utcnow() - datetime.timedelta(hours=6)
+            fecha_seleccionada = st.date_input("Selecciona la fecha a consultar:", value=horario_mex_actual.date())
+            fecha_sel_str = fecha_seleccionada.strftime("%Y-%m-%d")
+
+            if not df_reporte_ingresos.empty:
+                df_reporte_ingresos = df_reporte_ingresos[df_reporte_ingresos["Fecha_Solo"] == fecha_sel_str]
+            if not df_reporte_egresos.empty:
+                df_reporte_egresos = df_reporte_egresos[df_reporte_egresos["Fecha_Solo"] == fecha_sel_str]
+
+        # Limpiar columnas temporales auxiliares antes de mostrar
+        if not df_reporte_ingresos.empty and "Fecha_Solo" in df_reporte_ingresos.columns:
+            df_reporte_ingresos = df_reporte_ingresos.drop(columns=["Fecha_Solo"])
+        if not df_reporte_egresos.empty and "Fecha_Solo" in df_reporte_egresos.columns:
+            df_reporte_egresos = df_reporte_egresos.drop(columns=["Fecha_Solo"])
+
+        # Cálculos de Totales asegurando formato numérico
+        total_ingresos = pd.to_numeric(df_reporte_ingresos["Precio ($)"],
+                                       errors='coerce').sum() if not df_reporte_ingresos.empty else 0.0
+        total_egresos = pd.to_numeric(df_reporte_egresos["Monto ($)"],
+                                      errors='coerce').sum() if not df_reporte_egresos.empty else 0.0
         utilidad_neta = total_ingresos - total_egresos
 
         # Métricas de Balance
         col_r1, col_r2, col_r3 = st.columns(3)
         with col_r1:
-            st.metric(label="💰 Ingresos Totales", value=f"${total_ingresos:,.2f}")
+            st.metric(label="💰 Ingresos del Periodo", value=f"${total_ingresos:,.2f}")
         with col_r2:
-            st.metric(label="📉 Egresos Totales", value=f"${total_egresos:,.2f}")
+            st.metric(label="📉 Egresos del Periodo", value=f"${total_egresos:,.2f}")
         with col_r3:
             st.metric(label="⭐ Utilidad Neta (Ganancia)", value=f"${utilidad_neta:,.2f}",
                       delta=f"${utilidad_neta:,.2f}")
@@ -562,22 +581,26 @@ with tab_reportes:
         st.subheader("Desglose de Ingresos por Tipo de Servicio")
         if not df_reporte_ingresos.empty:
             df_temp = df_reporte_ingresos.copy()
-            df_temp["Precio ($)"] = pd.to_numeric(df_temp["Precio ($)"])
+            df_temp["Precio ($)"] = pd.to_numeric(df_temp["Precio ($)"], errors='coerce')
             resumen = df_temp.groupby("Tipo de Lavado")["Precio ($)"].sum().reset_index()
             st.bar_chart(data=resumen, x="Tipo de Lavado", y="Precio ($)", use_container_width=True)
         else:
-            st.info("No hay ingresos para mostrar en gráfica.")
+            st.info("No hay ingresos para mostrar en gráfica en este periodo.")
 
         st.subheader("📋 Detalle de Ingresos (Tickets)")
-        st.dataframe(df_reporte_ingresos, use_container_width=True, hide_index=True)
+        if not df_reporte_ingresos.empty:
+            st.dataframe(df_reporte_ingresos, use_container_width=True, hide_index=True)
+        else:
+            st.info("No hay ingresos registrados en este periodo.")
 
         st.subheader("📉 Detalle de Egresos (Gastos)")
         if not df_reporte_egresos.empty:
+            df_reporte_egresos["Monto ($)"] = pd.to_numeric(df_reporte_egresos["Monto ($)"], errors='coerce')
             st.dataframe(df_reporte_egresos, use_container_width=True, hide_index=True)
         else:
-            st.info("No hay egresos en este periodo.")
+            st.info("No hay egresos registrados en este periodo.")
 
-        # Botón de Descarga CSV de Ingresos
+        # Botón de Descarga CSV del reporte actual
         csv_data = df_reporte_ingresos.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="📥 Descargar Reporte de Ingresos en CSV",
