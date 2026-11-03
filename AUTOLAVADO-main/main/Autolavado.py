@@ -256,7 +256,10 @@ with tab_registro:
 with tab_inicio:
     st.subheader(f"📊 Resumen del Día: {datetime.date.today().strftime('%d/%m/%Y')}")
 
-    hoy_str = datetime.datetime.now().strftime("%Y-%m-%d")
+    # Forzamos la hora de México restando las horas necesarias o usando la zona horaria local
+    # (Hora UTC del servidor menos 6 horas para horario central de México)
+    horario_mexico = datetime.datetime.utcnow() - datetime.timedelta(hours=6)
+    hoy_str = horario_mexico.strftime("%Y-%m-%d")
 
     if not st.session_state.servicios.empty:
         df_servicios = st.session_state.servicios.copy()
