@@ -71,15 +71,21 @@ def cargar_egresos():
         data = sheet.get_all_records()
         df = pd.DataFrame(data)
 
-        columnas_requeridas = ["Fecha", "Concepto", "Monto ($)"]
+        # Si el DataFrame viene vacío o con columnas extrañas
         if df.empty:
-            return pd.DataFrame(columns=columnas_requeridas)
+            return pd.DataFrame(columns=["Fecha", "Concepto", "Monto ($)"])
 
+        # Limpiamos posibles filas totalmente vacías o mal indexadas
+        df = df.dropna(how="all")
+
+        # Nos aseguramos de conservar solo las columnas oficiales y en orden
+        columnas_requeridas = ["Fecha", "Concepto", "Monto ($)"]
         for col in columnas_requeridas:
             if col not in df.columns:
                 df[col] = ""
 
-        return df
+        # Retornamos únicamente las tres columnas limpias para evitar duplicidad visual
+        return df[columnas_requeridas]
     except Exception as e:
         st.error(f"Error al conectar con Google Sheets (Egresos): {e}")
         return pd.DataFrame(columns=["Fecha", "Concepto", "Monto ($)"])
