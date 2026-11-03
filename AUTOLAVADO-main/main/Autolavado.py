@@ -23,7 +23,26 @@ def conectar_google_sheets():
     return sheet
 
 
-# --- CARGAR DATOS DESDE GOOGLE SHEETS ---
+# --- CONEXIÓN CON LA PESTAÑA DE EGRESOS EN GOOGLE SHEETS ---
+def conectar_egresos_sheets():
+    scope = [
+        "https://spreadsheets.google.com/feeds",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    creds = ServiceAccountCredentials.from_json_keyfile_name("credenciales.json", scope)
+    client = gspread.authorize(creds)
+    try:
+        # Intenta abrir la pestaña "Egresos"
+        sheet = client.open(NOMBRE_HOJA_GOOGLE).worksheet("Egresos")
+    except Exception:
+        # Si no existe, la crea automáticamente con sus encabezados
+        spreadsheet = client.open(NOMBRE_HOJA_GOOGLE)
+        sheet = spreadsheet.add_worksheet(title="Egresos", rows=100, cols=3)
+        sheet.append_row(["Fecha", "Concepto", "Monto ($)"])
+    return sheet
+
+
+# --- CARGAR DATOS DE INGRESOS ---
 def cargar_datos():
     try:
         sheet = conectar_google_sheets()
@@ -40,9 +59,44 @@ def cargar_datos():
 
         return df
     except Exception as e:
-        st.error(f"Error al conectar con Google Sheets: {e}")
+        st.error(f"Error al conectar con Google Sheets (Ingresos): {e}")
         return pd.DataFrame(
             columns=["Fecha", "Cliente", "Vehículo", "Placas", "Tipo de Lavado", "Precio ($)", "Estatus"])
+
+
+# --- CARGAR DATOS DE EGRESOS ---
+def cargar_egresos():
+    try:
+        sheet = conectar_egresos_sheets()
+        data = sheet.get_all_records()
+        df = pd.DataFrame(data)
+
+        columnas_requeridas = ["Fecha", "Concepto", "Monto ($)"]
+        if df.empty:
+            return pd.DataFrame(columns=columnas_requeridas)
+
+        for col in columnas_requeridas:
+            if col not in df.columns:
+                df[col] = ""
+
+        return df
+    except Exception as e:
+        st.error(f"Error al conectar con Google Sheets (Egresos): {e}")
+        return pd.DataFrame(columns=["Fecha", "Concepto", "Monto ($)"])
+
+
+# --- GUARDAR EGRESO EN SHEETS ---
+def agregar_egreso_a_sheets(nuevo_egreso):
+    try:
+        sheet = conectar_egresos_sheets()
+        fila = [
+            nuevo_egreso["Fecha"],
+            nuevo_egreso["Concepto"],
+            nuevo_egreso["Monto ($)"]
+        ]
+        sheet.append_row(fila)
+    except Exception as e:
+        st.error(f"Error al guardar el egreso en Google Sheets: {e}")
 
 
 # --- ACTUALIZAR ESTATUS EN GOOGLE SHEETS ---
@@ -106,9 +160,9 @@ def actualizar_registro_en_sheets(indice_real, datos_actualizados):
 st.html("""
     <style>
         button[data-baseweb="tab"] {
-            font-size: 20px !important;
+            font-size: 18px !important;
             font-weight: bold !important;
-            padding: 12px 20px !important;
+            padding: 10px 15px !important;
         }
         button[data-baseweb="tab"][aria-selected="true"] {
             color: #ff4b4b !important;
@@ -145,6 +199,9 @@ if ruta_logo:
 if 'servicios' not in st.session_state:
     st.session_state.servicios = cargar_datos()
 
+if 'egresos' not in st.session_state:
+    st.session_state.egresos = cargar_egresos()
+
 # Inicializar variables del formulario
 if 'input_nombre' not in st.session_state:
     st.session_state.input_nombre = ""
@@ -153,10 +210,13 @@ if 'input_vehiculo' not in st.session_state:
 if 'input_placas' not in st.session_state:
     st.session_state.input_placas = ""
 
-# CREACIÓN DE PESTAÑAS SEPARADAS
-tab_registro, tab_inicio, tab_reportes = st.tabs(
-    ["📝 Registro de Servicio", "📊 Inicio (Día de Hoy)", "📈 Reporte de Ventas"]
-)
+# CREACIÓN DE 4 PESTAÑAS
+tab_registro, tab_inicio, tab_egresos, tab_reportes = st.tabs([
+    "📝 Registro",
+    "📊 Inicio (Hoy)",
+    "💸 Egresos / Gastos",
+    "📈 Reportes y Caja"
+])
 
 # =========================================================
 # 1. CONTENIDO PESTAÑA: REGISTRO
@@ -224,7 +284,6 @@ with tab_registro:
 
     if registrar:
         if nombre and vehiculo:
-            # Hora ajustada a México al guardar el registro
             horario_mex = datetime.datetime.utcnow() - datetime.timedelta(hours=6)
             detalle_lavado = f"{tipo_vehiculo} - {paquete_seleccionado}"
 
@@ -251,7 +310,6 @@ with tab_registro:
 # 2. CONTENIDO PESTAÑA: INICIO (FILTRADO HOY)
 # =========================================================
 with tab_inicio:
-    # Ajuste de Zona Horaria (UTC -6 México)
     horario_mexico = datetime.datetime.utcnow() - datetime.timedelta(hours=6)
     hoy_str = horario_mexico.strftime("%Y-%m-%d")
 
@@ -290,7 +348,6 @@ with tab_inicio:
             placa_val = str(fila["Placas"]).strip() if pd.notna(fila["Placas"]) else ""
             txt_placas = placa_val.upper() if placa_val != "" else "SIN PLACAS"
 
-            # Tarjeta visual del auto
             st.html(f"""
                         <div class="car-card">
                             <h3 style='margin:0px;'>🚗 {fila['Vehículo']}</h3>
@@ -299,7 +356,6 @@ with tab_inicio:
                         </div>
                     """)
 
-            # ➕ Agregar Servicio Extra Personalizado (Texto Libre)
             with st.expander(f"➕ Agregar Servicio Extra a {txt_placas}"):
                 extra_personalizado = st.text_input(
                     "Nombre del Extra (Ej. Polish, Faros, etc.):",
@@ -334,7 +390,6 @@ with tab_inicio:
                     else:
                         st.error("Por favor, escribe el nombre del servicio extra.")
 
-            # ⚙️ Editar o Eliminar Registro
             with st.expander(f"⚙️ Editar o Eliminar ({txt_placas})"):
                 nuevo_cliente = st.text_input("Editar Cliente:", value=str(fila['Cliente']),
                                               key=f"edit_cli_{indice_real}")
@@ -367,7 +422,6 @@ with tab_inicio:
                         st.toast("¡Registro eliminado correctamente!")
                         st.rerun()
 
-            # Botón para marcar terminado
             if st.button(f"✅ Marcar Terminado ({txt_placas})", key=f"btn_tab_{indice_real}", type="primary",
                          use_container_width=True):
                 st.session_state.servicios.at[indice_real, "Estatus"] = "Terminado"
@@ -379,7 +433,6 @@ with tab_inicio:
     else:
         st.success("¡No hay servicios pendientes para el día de hoy!")
 
-    # 📋 Historial del Día Editable
     st.subheader("📋 Historial del Día (Editable)")
     if not df_hoy.empty:
         tabla_mostrar = df_hoy.drop(columns=["Fecha_Solo"])
@@ -422,37 +475,108 @@ with tab_inicio:
         st.info("Aún no hay registros para el día de hoy.")
 
 # =========================================================
-# 3. CONTENIDO PESTAÑA: REPORTES
+# 3. CONTENIDO PESTAÑA: EGRESOS / GASTOS
+# =========================================================
+with tab_egresos:
+    st.subheader("💸 Registro de Egresos y Gastos del Negocio")
+
+    with st.form("form_egreso"):
+        concepto_egreso = st.text_input("Concepto del Gasto (Ej. Compra de Shampoo, Luz, Sueldo, Agua):")
+        monto_egreso = st.number_input("Monto del Gasto ($):", min_value=0.0, step=10.0, value=50.0)
+
+        btn_guardar_egreso = st.form_submit_button("📉 Registrar Gasto", use_container_width=True)
+
+        if btn_guardar_egreso:
+            if concepto_egreso.strip() != "":
+                horario_mex = datetime.datetime.utcnow() - datetime.timedelta(hours=6)
+                nuevo_egreso = {
+                    "Fecha": horario_mex.strftime("%Y-%m-%d %H:%M"),
+                    "Concepto": concepto_egreso.strip(),
+                    "Monto ($)": monto_egreso
+                }
+                agregar_egreso_a_sheets(nuevo_egreso)
+                st.session_state.egresos = cargar_egresos()
+                st.success(f"¡Gasto de ${monto_egreso:,.2f} registrado con éxito!")
+                st.rerun()
+            else:
+                st.error("Por favor, escribe el concepto del gasto.")
+
+    st.subheader("📋 Historial de Egresos Registrados")
+    if not st.session_state.egresos.empty:
+        st.dataframe(st.session_state.egresos, use_container_width=True, hide_index=True)
+    else:
+        st.info("No hay egresos registrados todavía.")
+
+# =========================================================
+# 4. CONTENIDO PESTAÑA: REPORTES Y CAJA
 # =========================================================
 with tab_reportes:
-    st.subheader("📈 Reportes Generales y Cierre de Caja")
+    st.subheader("📈 Reportes Generales, Ingresos, Egresos y Utilidad Neta")
 
-    if not st.session_state.servicios.empty:
+    if not st.session_state.servicios.empty or not st.session_state.egresos.empty:
         ver_todo = st.checkbox("Mostrar todo el historial histórico acumulado", value=True)
 
         if ver_todo:
-            df_reporte = st.session_state.servicios.copy()
+            df_reporte_ingresos = st.session_state.servicios.copy()
+            df_reporte_egresos = st.session_state.egresos.copy()
         else:
-            df_reporte = df_hoy.copy()
-            if "Fecha_Solo" in df_reporte.columns:
-                df_reporte = df_reporte.drop(columns=["Fecha_Solo"])
+            df_reporte_ingresos = df_hoy.copy()
+            if "Fecha_Solo" in df_reporte_ingresos.columns:
+                df_reporte_ingresos = df_reporte_ingresos.drop(columns=["Fecha_Solo"])
+
+            # Filtrar egresos también por el día de hoy si no se ve todo
+            if not st.session_state.egresos.empty:
+                df_egresos_temp = st.session_state.egresos.copy()
+                df_egresos_temp["Fecha_Solo"] = df_egresos_temp["Fecha"].astype(str).str.slice(0, 10)
+                df_reporte_egresos = df_egresos_temp[df_egresos_temp["Fecha_Solo"] == hoy_str].drop(
+                    columns=["Fecha_Solo"])
+            else:
+                df_reporte_egresos = pd.DataFrame(columns=["Fecha", "Concepto", "Monto ($)"])
+
+        # Cálculos de Totales
+        total_ingresos = pd.to_numeric(
+            df_reporte_ingresos["Precio ($)"]).sum() if not df_reporte_ingresos.empty else 0.0
+        total_egresos = pd.to_numeric(df_reporte_egresos["Monto ($)"]).sum() if not df_reporte_egresos.empty else 0.0
+        utilidad_neta = total_ingresos - total_egresos
+
+        # Métricas de Balance
+        col_r1, col_r2, col_r3 = st.columns(3)
+        with col_r1:
+            st.metric(label="💰 Ingresos Totales", value=f"${total_ingresos:,.2f}")
+        with col_r2:
+            st.metric(label="📉 Egresos Totales", value=f"${total_egresos:,.2f}")
+        with col_r3:
+            st.metric(label="⭐ Utilidad Neta (Ganancia)", value=f"${utilidad_neta:,.2f}",
+                      delta=f"${utilidad_neta:,.2f}")
+
+        st.write("---")
 
         st.subheader("Desglose de Ingresos por Tipo de Servicio")
-        df_temp = df_reporte.copy()
-        df_temp["Precio ($)"] = pd.to_numeric(df_temp["Precio ($)"])
-        resumen = df_temp.groupby("Tipo de Lavado")["Precio ($)"].sum().reset_index()
-        st.bar_chart(data=resumen, x="Tipo de Lavado", y="Precio ($)", use_container_width=True)
+        if not df_reporte_ingresos.empty:
+            df_temp = df_reporte_ingresos.copy()
+            df_temp["Precio ($)"] = pd.to_numeric(df_temp["Precio ($)"])
+            resumen = df_temp.groupby("Tipo de Lavado")["Precio ($)"].sum().reset_index()
+            st.bar_chart(data=resumen, x="Tipo de Lavado", y="Precio ($)", use_container_width=True)
+        else:
+            st.info("No hay ingresos para mostrar en gráfica.")
 
-        st.subheader("Historial de Tickets")
-        st.dataframe(df_reporte, use_container_width=True)
+        st.subheader("📋 Detalle de Ingresos (Tickets)")
+        st.dataframe(df_reporte_ingresos, use_container_width=True, hide_index=True)
 
-        csv_data = df_reporte.to_csv(index=False).encode('utf-8')
+        st.subheader("📉 Detalle de Egresos (Gastos)")
+        if not df_reporte_egresos.empty:
+            st.dataframe(df_reporte_egresos, use_container_width=True, hide_index=True)
+        else:
+            st.info("No hay egresos en este periodo.")
+
+        # Botón de Descarga CSV de Ingresos
+        csv_data = df_reporte_ingresos.to_csv(index=False).encode('utf-8')
         st.download_button(
-            label="📥 Descargar Reporte en CSV",
+            label="📥 Descargar Reporte de Ingresos en CSV",
             data=csv_data,
-            file_name=f"reporte_racewash_{datetime.date.today()}.csv",
+            file_name=f"reporte_ingresos_racewash_{datetime.date.today()}.csv",
             mime="text/csv",
             use_container_width=True,
         )
     else:
-        st.warning("No hay datos de ventas registrados todavía.")
+        st.warning("No hay datos de ventas ni de gastos registrados todavía.")
