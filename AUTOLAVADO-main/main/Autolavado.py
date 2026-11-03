@@ -518,15 +518,11 @@ with tab_egresos:
 # =========================================================
 # 4. CONTENIDO PESTAÑA: REPORTES Y CAJA
 # =========================================================
-# =========================================================
-# 4. CONTENIDO PESTAÑA: REPORTES Y CAJA
-# =========================================================
 with tab_reportes:
     st.subheader("📈 Reportes, Ingresos, Egresos y Corte por Fecha")
 
     if not st.session_state.servicios.empty or not st.session_state.egresos.empty:
 
-        # Opciones de visualización
         modo_filtro = st.radio(
             "Selecciona el modo de vista:",
             ["📅 Ver un día específico", "📊 Historial acumulado (Todo)"],
@@ -536,13 +532,14 @@ with tab_reportes:
         df_reporte_ingresos = st.session_state.servicios.copy()
         df_reporte_egresos = st.session_state.egresos.copy()
 
-        # Preparar columna de solo fecha para los filtros
+        # Normalizamos las fechas reemplazando cualquier barra '/' por guión '-' para que coincidan siempre
         if not df_reporte_ingresos.empty:
-            df_reporte_ingresos["Fecha_Solo"] = df_reporte_ingresos["Fecha"].astype(str).str.slice(0, 10)
+            df_reporte_ingresos["Fecha_Solo"] = df_reporte_ingresos["Fecha"].astype(str).str.slice(0, 10).str.replace(
+                "/", "-")
         if not df_reporte_egresos.empty:
-            df_reporte_egresos["Fecha_Solo"] = df_reporte_egresos["Fecha"].astype(str).str.slice(0, 10)
+            df_reporte_egresos["Fecha_Solo"] = df_reporte_egresos["Fecha"].astype(str).str.slice(0, 10).str.replace("/",
+                                                                                                                    "-")
 
-        # Filtrar según la opción elegida
         if modo_filtro == "📅 Ver un día específico":
             horario_mex_actual = datetime.datetime.utcnow() - datetime.timedelta(hours=6)
             fecha_seleccionada = st.date_input("Selecciona la fecha a consultar:", value=horario_mex_actual.date())
@@ -600,7 +597,6 @@ with tab_reportes:
         else:
             st.info("No hay egresos registrados en este periodo.")
 
-        # Botón de Descarga CSV del reporte actual
         csv_data = df_reporte_ingresos.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="📥 Descargar Reporte de Ingresos en CSV",
