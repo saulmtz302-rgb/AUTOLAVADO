@@ -76,7 +76,7 @@ def agregar_fila_a_sheets(nuevo_registro):
 def eliminar_fila_en_sheets(indice_real):
     try:
         sheet = conectar_google_sheets()
-        fila_excel = indice_real + 2  # +2 por los encabezados y filas de Excel
+        fila_excel = indice_real + 2
         sheet.delete_rows(fila_excel)
     except Exception as e:
         st.error(f"Error al eliminar de Google Sheets: {e}")
@@ -145,7 +145,7 @@ if ruta_logo:
 if 'servicios' not in st.session_state:
     st.session_state.servicios = cargar_datos()
 
-# Inicializar las variables de los inputs del formulario
+# Inicializar variables del formulario
 if 'input_nombre' not in st.session_state:
     st.session_state.input_nombre = ""
 if 'input_vehiculo' not in st.session_state:
@@ -153,22 +153,23 @@ if 'input_vehiculo' not in st.session_state:
 if 'input_placas' not in st.session_state:
     st.session_state.input_placas = ""
 
-# CREACIÓN DE PESTAÑAS
+# CREACIÓN DE PESTAÑAS SEPARADAS
 tab_registro, tab_inicio, tab_reportes = st.tabs(
-    ["📝 Registro de Servicio", "📊 Inicio (Día de Hoy)", "📈 Reporte de Ventas"])
+    ["📝 Registro de Servicio", "📊 Inicio (Día de Hoy)", "📈 Reporte de Ventas"]
+)
 
-# ----------------- CONTENIDO PESTAÑA: REGISTRO -----------------
+# =========================================================
+# 1. CONTENIDO PESTAÑA: REGISTRO
+# =========================================================
 with tab_registro:
     st.subheader("📝 Registrar Nuevo Servicio (RaceWash)")
 
-    # 1. Verificamos al inicio si hay una orden de limpiar los campos pendiente
     if st.session_state.get('limpiar_pendientes', False):
         st.session_state.input_nombre = ""
         st.session_state.input_vehiculo = ""
         st.session_state.input_placas = ""
         st.session_state.limpiar_pendientes = False
 
-    # 📌 2. Diccionario de precios
     precios_catalogo = {
         ("Auto chico / Sedán", "Básico"): 140.0,
         ("Auto chico / Sedán", "Race"): 200.0,
@@ -183,7 +184,6 @@ with tab_registro:
         ("Extra / Servicio Adicional", "Lavado de Interiores"): 300.0,
     }
 
-    # 3. Controles de selección de tipo y paquete
     tipo_vehiculo = st.selectbox("Tipo de Vehículo / Servicio:", [
         "Auto chico / Sedán",
         "Camionetas / SUV",
@@ -202,18 +202,14 @@ with tab_registro:
         paquetes_disponibles = ["Básico", "Race", "Premium"]
 
     paquete_seleccionado = st.selectbox("Selecciona el Paquete / Opción:", paquetes_disponibles)
-
     precio_automatico = precios_catalogo.get((tipo_vehiculo, paquete_seleccionado), 150.0)
 
-    # Campos de texto enlazados a session_state
     nombre = st.text_input("Nombre del Cliente:", key="input_nombre")
     vehiculo = st.text_input("Modelo del Vehículo / Descripción (Ej. Jetta Negro / Moto Italika):",
                              key="input_vehiculo")
     placas = st.text_input("Número de Placas:", key="input_placas")
-
     precio = st.number_input("Precio del Servicio ($):", min_value=0.0, step=10.0, value=precio_automatico)
 
-    # Botones de acción organizados en dos columnas
     col_btn1, col_btn2 = st.columns(2)
 
     with col_btn1:
@@ -222,18 +218,18 @@ with tab_registro:
     with col_btn2:
         limpiar = st.button("🧹 Limpiar Campos", use_container_width=True)
 
-    # Lógica del botón Limpiar
     if limpiar:
         st.session_state.limpiar_pendientes = True
         st.rerun()
 
-    # Lógica del botón Registrar
     if registrar:
         if nombre and vehiculo:
+            # Hora ajustada a México al guardar el registro
+            horario_mex = datetime.datetime.utcnow() - datetime.timedelta(hours=6)
             detalle_lavado = f"{tipo_vehiculo} - {paquete_seleccionado}"
 
             nuevo_registro = {
-                "Fecha": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "Fecha": horario_mex.strftime("%Y-%m-%d %H:%M"),
                 "Cliente": nombre,
                 "Vehículo": vehiculo,
                 "Placas": placas.strip().upper() if placas else "",
@@ -244,7 +240,6 @@ with tab_registro:
 
             agregar_fila_a_sheets(nuevo_registro)
             st.session_state.servicios = cargar_datos()
-
             st.session_state.limpiar_pendientes = True
 
             st.success(f"¡Servicio para {vehiculo} registrado con éxito en la nube!")
@@ -252,22 +247,22 @@ with tab_registro:
         else:
             st.error("Por favor, llena los campos obligatorios (Nombre y Vehículo).")
 
-# ----------------- CONTENIDO PESTAÑA: INICIO (FILTRADO HOY) -----------------
-    # ----------------- CONTENIDO PESTAÑA: INICIO (FILTRADO HOY) -----------------
-    with tab_inicio:
-        # 🛠️ Calculamos primero la hora de México para usarla tanto en el filtro como en el título
-        horario_mexico = datetime.datetime.utcnow() - datetime.timedelta(hours=6)
-        hoy_str = horario_mexico.strftime("%Y-%m-%d")
+# =========================================================
+# 2. CONTENIDO PESTAÑA: INICIO (FILTRADO HOY)
+# =========================================================
+with tab_inicio:
+    # Ajuste de Zona Horaria (UTC -6 México)
+    horario_mexico = datetime.datetime.utcnow() - datetime.timedelta(hours=6)
+    hoy_str = horario_mexico.strftime("%Y-%m-%d")
 
-        # Usamos la fecha de México para el título visual
-        st.subheader(f"📊 Resumen del Día: {horario_mexico.strftime('%d/%m/%Y')}")
+    st.subheader(f"📊 Resumen del Día: {horario_mexico.strftime('%d/%m/%Y')}")
 
-        if not st.session_state.servicios.empty:
-            df_servicios = st.session_state.servicios.copy()
-            df_servicios["Fecha_Solo"] = df_servicios["Fecha"].astype(str).str.slice(0, 10)
-            df_hoy = df_servicios[df_servicios["Fecha_Solo"] == hoy_str]
-        else:
-            df_hoy = pd.DataFrame()
+    if not st.session_state.servicios.empty:
+        df_servicios = st.session_state.servicios.copy()
+        df_servicios["Fecha_Solo"] = df_servicios["Fecha"].astype(str).str.slice(0, 10)
+        df_hoy = df_servicios[df_servicios["Fecha_Solo"] == hoy_str]
+    else:
+        df_hoy = pd.DataFrame()
 
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -295,7 +290,7 @@ with tab_registro:
             placa_val = str(fila["Placas"]).strip() if pd.notna(fila["Placas"]) else ""
             txt_placas = placa_val.upper() if placa_val != "" else "SIN PLACAS"
 
-            # 1. Tarjeta visual del auto
+            # Tarjeta visual del auto
             st.html(f"""
                         <div class="car-card">
                             <h3 style='margin:0px;'>🚗 {fila['Vehículo']}</h3>
@@ -304,9 +299,8 @@ with tab_registro:
                         </div>
                     """)
 
-            # 2. ➕ Agregar Servicio Extra Personalizado (Texto libre y Precio)
+            # ➕ Agregar Servicio Extra Personalizado (Texto Libre)
             with st.expander(f"➕ Agregar Servicio Extra a {txt_placas}"):
-                # Campo de texto libre para escribir cualquier extra personalizado
                 extra_personalizado = st.text_input(
                     "Nombre del Extra (Ej. Polish, Faros, etc.):",
                     value="",
@@ -324,15 +318,12 @@ with tab_registro:
                 if st.button(f"Confirmar y Sumar Extra", key=f"btn_confirmar_extra_{indice_real}",
                              use_container_width=True):
                     if extra_personalizado.strip() != "":
-                        # Actualizamos el tipo de lavado sumando lo que tú escribiste
                         nuevo_tipo_lavado = f"{fila['Tipo de Lavado']} + {extra_personalizado.strip()}"
                         nuevo_precio = float(fila["Precio ($)"]) + costo_extra
 
-                        # Actualizamos en el DataFrame de sesión
                         st.session_state.servicios.at[indice_real, "Tipo de Lavado"] = nuevo_tipo_lavado
                         st.session_state.servicios.at[indice_real, "Precio ($)"] = nuevo_precio
 
-                        # Sincronizamos con Google Sheets
                         sheet = conectar_google_sheets()
                         fila_excel = indice_real + 2
                         sheet.update_cell(fila_excel, 5, nuevo_tipo_lavado)
@@ -343,7 +334,7 @@ with tab_registro:
                     else:
                         st.error("Por favor, escribe el nombre del servicio extra.")
 
-            # 3. ⚙️ Editar o Eliminar Registro
+            # ⚙️ Editar o Eliminar Registro
             with st.expander(f"⚙️ Editar o Eliminar ({txt_placas})"):
                 nuevo_cliente = st.text_input("Editar Cliente:", value=str(fila['Cliente']),
                                               key=f"edit_cli_{indice_real}")
@@ -376,7 +367,7 @@ with tab_registro:
                         st.toast("¡Registro eliminado correctamente!")
                         st.rerun()
 
-            # 4. Botón tradicional para marcar terminado
+            # Botón para marcar terminado
             if st.button(f"✅ Marcar Terminado ({txt_placas})", key=f"btn_tab_{indice_real}", type="primary",
                          use_container_width=True):
                 st.session_state.servicios.at[indice_real, "Estatus"] = "Terminado"
@@ -388,12 +379,10 @@ with tab_registro:
     else:
         st.success("¡No hay servicios pendientes para el día de hoy!")
 
+    # 📋 Historial del Día Editable
     st.subheader("📋 Historial del Día (Editable)")
     if not df_hoy.empty:
-        # Preparamos la tabla sin la columna auxiliar de fecha corta
         tabla_mostrar = df_hoy.drop(columns=["Fecha_Solo"])
-
-        # 📊 st.data_editor permite modificar celdas directamente en pantalla
         df_editado = st.data_editor(
             tabla_mostrar,
             key="editor_historial_hoy",
@@ -401,12 +390,9 @@ with tab_registro:
             hide_index=True
         )
 
-        # Botón para guardar los cambios hechos en la tabla hacia Google Sheets
         if st.button("💾 Guardar Cambios de la Tabla en la Nube", use_container_width=True):
             try:
                 sheet = conectar_google_sheets()
-
-                # Actualizamos el DataFrame principal en la sesión con los datos editados
                 for idx in df_editado.index:
                     st.session_state.servicios.loc[idx, "Cliente"] = df_editado.loc[idx, "Cliente"]
                     st.session_state.servicios.loc[idx, "Vehículo"] = df_editado.loc[idx, "Vehículo"]
@@ -415,7 +401,6 @@ with tab_registro:
                     st.session_state.servicios.loc[idx, "Precio ($)"] = float(df_editado.loc[idx, "Precio ($)"])
                     st.session_state.servicios.loc[idx, "Estatus"] = df_editado.loc[idx, "Estatus"]
 
-                    # Sincronizamos fila por fila en Google Sheets (fila real = índice + 2)
                     fila_excel = idx + 2
                     rango = f"A{fila_excel}:G{fila_excel}"
                     fila_valores = [
@@ -436,7 +421,9 @@ with tab_registro:
     else:
         st.info("Aún no hay registros para el día de hoy.")
 
-# ----------------- CONTENIDO PESTAÑA: REPORTES -----------------
+# =========================================================
+# 3. CONTENIDO PESTAÑA: REPORTES
+# =========================================================
 with tab_reportes:
     st.subheader("📈 Reportes Generales y Cierre de Caja")
 
