@@ -481,6 +481,10 @@ with tab_egresos:
     st.subheader("💸 Registro de Egresos y Gastos del Negocio")
 
     with st.form("form_egreso"):
+        # 📅 Selector de fecha (Por defecto trae el día actual de México)
+        horario_mex_actual = datetime.datetime.utcnow() - datetime.timedelta(hours=6)
+        fecha_egreso = st.date_input("Fecha del Gasto:", value=horario_mex_actual.date())
+
         concepto_egreso = st.text_input("Concepto del Gasto (Ej. Compra de Shampoo, Luz, Sueldo, Agua):")
         monto_egreso = st.number_input("Monto del Gasto ($):", min_value=0.0, step=10.0, value=50.0)
 
@@ -488,15 +492,19 @@ with tab_egresos:
 
         if btn_guardar_egreso:
             if concepto_egreso.strip() != "":
-                horario_mex = datetime.datetime.utcnow() - datetime.timedelta(hours=6)
+                # Combinamos la fecha seleccionada con la hora actual exacta
+                hora_actual = horario_mex_actual.strftime("%H:%M")
+                fecha_formateada = f"{fecha_egreso.strftime('%Y-%m-%d')} {hora_actual}"
+
                 nuevo_egreso = {
-                    "Fecha": horario_mex.strftime("%Y-%m-%d %H:%M"),
+                    "Fecha": fecha_formateada,
                     "Concepto": concepto_egreso.strip(),
                     "Monto ($)": monto_egreso
                 }
                 agregar_egreso_a_sheets(nuevo_egreso)
                 st.session_state.egresos = cargar_egresos()
-                st.success(f"¡Gasto de ${monto_egreso:,.2f} registrado con éxito!")
+                st.success(
+                    f"¡Gasto de ${monto_egreso:,.2f} registrado para el día {fecha_egreso.strftime('%d/%m/%Y')} con éxito!")
                 st.rerun()
             else:
                 st.error("Por favor, escribe el concepto del gasto.")
