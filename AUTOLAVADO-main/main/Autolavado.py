@@ -253,20 +253,21 @@ with tab_registro:
             st.error("Por favor, llena los campos obligatorios (Nombre y Vehículo).")
 
 # ----------------- CONTENIDO PESTAÑA: INICIO (FILTRADO HOY) -----------------
-with tab_inicio:
-    st.subheader(f"📊 Resumen del Día: {datetime.date.today().strftime('%d/%m/%Y')}")
+    # ----------------- CONTENIDO PESTAÑA: INICIO (FILTRADO HOY) -----------------
+    with tab_inicio:
+        # 🛠️ Calculamos primero la hora de México para usarla tanto en el filtro como en el título
+        horario_mexico = datetime.datetime.utcnow() - datetime.timedelta(hours=6)
+        hoy_str = horario_mexico.strftime("%Y-%m-%d")
 
-    # Forzamos la hora de México restando las horas necesarias o usando la zona horaria local
-    # (Hora UTC del servidor menos 6 horas para horario central de México)
-    horario_mexico = datetime.datetime.utcnow() - datetime.timedelta(hours=6)
-    hoy_str = horario_mexico.strftime("%Y-%m-%d")
+        # Usamos la fecha de México para el título visual
+        st.subheader(f"📊 Resumen del Día: {horario_mexico.strftime('%d/%m/%Y')}")
 
-    if not st.session_state.servicios.empty:
-        df_servicios = st.session_state.servicios.copy()
-        df_servicios["Fecha_Solo"] = df_servicios["Fecha"].astype(str).str.slice(0, 10)
-        df_hoy = df_servicios[df_servicios["Fecha_Solo"] == hoy_str]
-    else:
-        df_hoy = pd.DataFrame()
+        if not st.session_state.servicios.empty:
+            df_servicios = st.session_state.servicios.copy()
+            df_servicios["Fecha_Solo"] = df_servicios["Fecha"].astype(str).str.slice(0, 10)
+            df_hoy = df_servicios[df_servicios["Fecha_Solo"] == hoy_str]
+        else:
+            df_hoy = pd.DataFrame()
 
     col1, col2, col3 = st.columns(3)
     with col1:
