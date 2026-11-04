@@ -8,7 +8,7 @@ import os
 # Configuración inicial de la página
 st.set_page_config(page_title="RaceWash Control", page_icon="🧼", layout="wide")
 
-# --- CONEXIÓN CON GOOGLE SHEETS ---
+# --- CONEXIÓN CON GOOGLE SHEETS (INGRESOS) ---
 NOMBRE_HOJA_GOOGLE = "Control_Autolavado"
 
 
@@ -32,10 +32,8 @@ def conectar_egresos_sheets():
     creds = ServiceAccountCredentials.from_json_keyfile_name("credenciales.json", scope)
     client = gspread.authorize(creds)
     try:
-        # Intenta abrir la pestaña "Egresos"
         sheet = client.open(NOMBRE_HOJA_GOOGLE).worksheet("Egresos")
     except Exception:
-        # Si no existe, la crea automáticamente con sus encabezados
         spreadsheet = client.open(NOMBRE_HOJA_GOOGLE)
         sheet = spreadsheet.add_worksheet(title="Egresos", rows=100, cols=3)
         sheet.append_row(["Fecha", "Concepto", "Monto ($)"])
@@ -49,19 +47,21 @@ def cargar_datos():
         data = sheet.get_all_records()
         df = pd.DataFrame(data)
 
-        columnas_requeridas = ["Fecha", "Cliente", "Vehículo", "Placas", "Tipo de Lavado", "Precio ($)", "Estatus"]
+        columnas_requeridas = ["Fecha", "Cliente", "Vehículo", "Placas", "Tipo de Lavado", "Precio ($)", "Estatus",
+                               "Método de Pago"]
         if df.empty:
             return pd.DataFrame(columns=columnas_requeridas)
 
         for col in columnas_requeridas:
             if col not in df.columns:
-                df[col] = ""
+                df[col] = "Efectivo" if col == "Método de Pago" else ""
 
         return df
     except Exception as e:
         st.error(f"Error al conectar con Google Sheets (Ingresos): {e}")
         return pd.DataFrame(
-            columns=["Fecha", "Cliente", "Vehículo", "Placas", "Tipo de Lavado", "Precio ($)", "Estatus"])
+            columns=["Fecha", "Cliente", "Vehículo", "Placas", "Tipo de Lavado", "Precio ($)", "Estatus",
+                     "Método de Pago"])
 
 
 # --- CARGAR DATOS DE EGRESOS ---
@@ -71,20 +71,15 @@ def cargar_egresos():
         data = sheet.get_all_records()
         df = pd.DataFrame(data)
 
-        # Si el DataFrame viene vacío o con columnas extrañas
         if df.empty:
             return pd.DataFrame(columns=["Fecha", "Concepto", "Monto ($)"])
 
-        # Limpiamos posibles filas totalmente vacías o mal indexadas
         df = df.dropna(how="all")
-
-        # Nos aseguramos de conservar solo las columnas oficiales y en orden
         columnas_requeridas = ["Fecha", "Concepto", "Monto ($)"]
         for col in columnas_requeridas:
             if col not in df.columns:
                 df[col] = ""
 
-        # Retornamos únicamente las tres columnas limpias para evitar duplicidad visual
         return df[columnas_requeridas]
     except Exception as e:
         st.error(f"Error al conectar con Google Sheets (Egresos): {e}")
@@ -125,7 +120,8 @@ def agregar_fila_a_sheets(nuevo_registro):
             nuevo_registro["Placas"],
             nuevo_registro["Tipo de Lavado"],
             nuevo_registro["Precio ($)"],
-            nuevo_registro["Estatus"]
+            nuevo_registro["Estatus"],
+            nuevo_registro["Método de Pago"]
         ]
         sheet.append_row(fila)
     except Exception as e:
@@ -147,7 +143,7 @@ def actualizar_registro_en_sheets(indice_real, datos_actualizados):
     try:
         sheet = conectar_google_sheets()
         fila_excel = indice_real + 2
-        rango = f"A{fila_excel}:G{fila_excel}"
+        rango = f"A{fila_excel}:H{fila_excel}"
         fila = [
             datos_actualizados["Fecha"],
             datos_actualizados["Cliente"],
@@ -155,7 +151,8 @@ def actualizar_registro_en_sheets(indice_real, datos_actualizados):
             datos_actualizados["Placas"],
             datos_actualizados["Tipo de Lavado"],
             datos_actualizados["Precio ($)"],
-            datos_actualizados["Estatus"]
+            datos_actualizados["Estatus"],
+            datos_actualizados["Método de Pago"]
         ]
         sheet.update(rango, [fila])
     except Exception as e:
@@ -208,7 +205,6 @@ if 'servicios' not in st.session_state:
 if 'egresos' not in st.session_state:
     st.session_state.egresos = cargar_egresos()
 
-# Inicializar variables del formulario
 if 'input_nombre' not in st.session_state:
     st.session_state.input_nombre = ""
 if 'input_vehiculo' not in st.session_state:
@@ -276,6 +272,9 @@ with tab_registro:
     placas = st.text_input("Número de Placas:", key="input_placas")
     precio = st.number_input("Precio del Servicio ($):", min_value=0.0, step=10.0, value=precio_automatico)
 
+    # Nuevo selector de Método de Pago
+    metodo_pago = st.radio("Método de Pago:", ["Efectivo", "Transferencia"], horizontal=True)
+
     col_btn1, col_btn2 = st.columns(2)
 
     with col_btn1:
@@ -300,14 +299,15 @@ with tab_registro:
                 "Placas": placas.strip().upper() if placas else "",
                 "Tipo de Lavado": detalle_lavado,
                 "Precio ($)": precio,
-                "Estatus": "En Proceso"
+                "Estatus": "En Proceso",
+                "Método de Pago": metodo_pago
             }
 
             agregar_fila_a_sheets(nuevo_registro)
             st.session_state.servicios = cargar_datos()
             st.session_state.limpiar_pendientes = True
 
-            st.success(f"¡Servicio para {vehiculo} registrado con éxito en la nube!")
+            st.success(f"¡Servicio para {vehiculo} registrado con éxito con pago en {metodo_pago}!")
             st.rerun()
         else:
             st.error("Por favor, llena los campos obligatorios (Nombre y Vehículo).")
@@ -323,7 +323,7 @@ with tab_inicio:
 
     if not st.session_state.servicios.empty:
         df_servicios = st.session_state.servicios.copy()
-        df_servicios["Fecha_Solo"] = df_servicios["Fecha"].astype(str).str.slice(0, 10)
+        df_servicios["Fecha_Solo"] = df_servicios["Fecha"].astype(str).str.slice(0, 10).str.replace("/", "-")
         df_hoy = df_servicios[df_servicios["Fecha_Solo"] == hoy_str]
     else:
         df_hoy = pd.DataFrame()
@@ -353,12 +353,13 @@ with tab_inicio:
         for indice_real, fila in autos_en_proceso_hoy.iterrows():
             placa_val = str(fila["Placas"]).strip() if pd.notna(fila["Placas"]) else ""
             txt_placas = placa_val.upper() if placa_val != "" else "SIN PLACAS"
+            pago_val = str(fila.get("Método de Pago", "Efectivo"))
 
             st.html(f"""
                         <div class="car-card">
                             <h3 style='margin:0px;'>🚗 {fila['Vehículo']}</h3>
                             <p style='margin:5px 0px;'><b>Placas:</b> {txt_placas} | <b>Cliente:</b> {fila['Cliente']}</p>
-                            <p style='margin:5px 0px;'><b>Servicio:</b> {fila['Tipo de Lavado']} — <span style='color:#25D366; font-weight:bold;'>${fila['Precio ($)']}</span></p>
+                            <p style='margin:5px 0px;'><b>Servicio:</b> {fila['Tipo de Lavado']} — <span style='color:#25D366; font-weight:bold;'>${fila['Precio ($)']}</span> ({pago_val})</p>
                         </div>
                     """)
 
@@ -405,6 +406,11 @@ with tab_inicio:
                 nuevo_precio = st.number_input("Editar Precio ($):", value=float(fila['Precio ($)']), step=10.0,
                                                key=f"edit_precio_{indice_real}")
 
+                opciones_pago = ["Efectivo", "Transferencia"]
+                pago_actual_idx = 0 if pago_val not in opciones_pago else opciones_pago.index(pago_val)
+                nuevo_metodo_pago = st.selectbox("Método de Pago:", opciones_pago, index=pago_actual_idx,
+                                                 key=f"edit_pago_{indice_real}")
+
                 col_ed1, col_ed2 = st.columns(2)
 
                 with col_ed1:
@@ -413,6 +419,7 @@ with tab_inicio:
                         st.session_state.servicios.at[indice_real, "Vehículo"] = nuevo_vehiculo
                         st.session_state.servicios.at[indice_real, "Placas"] = nuevas_placas.upper()
                         st.session_state.servicios.at[indice_real, "Precio ($)"] = nuevo_precio
+                        st.session_state.servicios.at[indice_real, "Método de Pago"] = nuevo_metodo_pago
 
                         datos_act = st.session_state.servicios.loc[indice_real].to_dict()
                         actualizar_registro_en_sheets(indice_real, datos_act)
@@ -459,9 +466,10 @@ with tab_inicio:
                     st.session_state.servicios.loc[idx, "Tipo de Lavado"] = df_editado.loc[idx, "Tipo de Lavado"]
                     st.session_state.servicios.loc[idx, "Precio ($)"] = float(df_editado.loc[idx, "Precio ($)"])
                     st.session_state.servicios.loc[idx, "Estatus"] = df_editado.loc[idx, "Estatus"]
+                    st.session_state.servicios.loc[idx, "Método de Pago"] = df_editado.loc[idx, "Método de Pago"]
 
                     fila_excel = idx + 2
-                    rango = f"A{fila_excel}:G{fila_excel}"
+                    rango = f"A{fila_excel}:H{fila_excel}"
                     fila_valores = [
                         str(st.session_state.servicios.loc[idx, "Fecha"]),
                         str(st.session_state.servicios.loc[idx, "Cliente"]),
@@ -469,7 +477,8 @@ with tab_inicio:
                         str(st.session_state.servicios.loc[idx, "Placas"]),
                         str(st.session_state.servicios.loc[idx, "Tipo de Lavado"]),
                         float(st.session_state.servicios.loc[idx, "Precio ($)"]),
-                        str(st.session_state.servicios.loc[idx, "Estatus"])
+                        str(st.session_state.servicios.loc[idx, "Estatus"]),
+                        str(st.session_state.servicios.loc[idx, "Método de Pago"])
                     ]
                     sheet.update(rango, [fila_valores])
 
@@ -487,7 +496,6 @@ with tab_egresos:
     st.subheader("💸 Registro de Egresos y Gastos del Negocio")
 
     with st.form("form_egreso"):
-        # 📅 Selector de fecha (Por defecto trae el día actual de México)
         horario_mex_actual = datetime.datetime.utcnow() - datetime.timedelta(hours=6)
         fecha_egreso = st.date_input("Fecha del Gasto:", value=horario_mex_actual.date())
 
@@ -498,7 +506,6 @@ with tab_egresos:
 
         if btn_guardar_egreso:
             if concepto_egreso.strip() != "":
-                # Combinamos la fecha seleccionada con la hora actual exacta
                 hora_actual = horario_mex_actual.strftime("%H:%M")
                 fecha_formateada = f"{fecha_egreso.strftime('%Y-%m-%d')} {hora_actual}"
 
@@ -538,7 +545,6 @@ with tab_reportes:
         df_reporte_ingresos = st.session_state.servicios.copy()
         df_reporte_egresos = st.session_state.egresos.copy()
 
-        # Normalizamos las fechas reemplazando cualquier barra '/' por guión '-' para que coincidan siempre
         if not df_reporte_ingresos.empty:
             df_reporte_ingresos["Fecha_Solo"] = df_reporte_ingresos["Fecha"].astype(str).str.slice(0, 10).str.replace(
                 "/", "-")
@@ -556,7 +562,6 @@ with tab_reportes:
             if not df_reporte_egresos.empty:
                 df_reporte_egresos = df_reporte_egresos[df_reporte_egresos["Fecha_Solo"] == fecha_sel_str]
 
-        # Limpiar columnas temporales auxiliares antes de mostrar
         if not df_reporte_ingresos.empty and "Fecha_Solo" in df_reporte_ingresos.columns:
             df_reporte_ingresos = df_reporte_ingresos.drop(columns=["Fecha_Solo"])
         if not df_reporte_egresos.empty and "Fecha_Solo" in df_reporte_egresos.columns:
@@ -569,22 +574,38 @@ with tab_reportes:
                                       errors='coerce').sum() if not df_reporte_egresos.empty else 0.0
         utilidad_neta = total_ingresos - total_egresos
 
-        # Métricas de Balance
+        # Subtotales por Método de Pago
+        if not df_reporte_ingresos.empty and "Método de Pago" in df_reporte_ingresos.columns:
+            df_reporte_ingresos["Precio ($)"] = pd.to_numeric(df_reporte_ingresos["Precio ($)"], errors='coerce')
+            pago_efectivo = df_reporte_ingresos[df_reporte_ingresos["Método de Pago"] == "Efectivo"]["Precio ($)"].sum()
+            pago_trans = df_reporte_ingresos[df_reporte_ingresos["Método de Pago"] == "Transferencia"][
+                "Precio ($)"].sum()
+        else:
+            pago_efectivo = total_ingresos
+            pago_trans = 0.0
+
+        # Métricas de Balance Principales
         col_r1, col_r2, col_r3 = st.columns(3)
         with col_r1:
-            st.metric(label="💰 Ingresos del Periodo", value=f"${total_ingresos:,.2f}")
+            st.metric(label="💰 Ingresos Totales", value=f"${total_ingresos:,.2f}")
         with col_r2:
-            st.metric(label="📉 Egresos del Periodo", value=f"${total_egresos:,.2f}")
+            st.metric(label="📉 Egresos Totales", value=f"${total_egresos:,.2f}")
         with col_r3:
             st.metric(label="⭐ Utilidad Neta (Ganancia)", value=f"${utilidad_neta:,.2f}",
                       delta=f"${utilidad_neta:,.2f}")
+
+        # Métricas de Desglose de Pago
+        col_p1, col_p2 = st.columns(2)
+        with col_p1:
+            st.metric(label="💵 Total en Efectivo (Caja Física)", value=f"${pago_efectivo:,.2f}")
+        with col_p2:
+            st.metric(label="📱 Total en Transferencias (Banco)", value=f"${pago_trans:,.2f}")
 
         st.write("---")
 
         st.subheader("Desglose de Ingresos por Tipo de Servicio")
         if not df_reporte_ingresos.empty:
             df_temp = df_reporte_ingresos.copy()
-            df_temp["Precio ($)"] = pd.to_numeric(df_temp["Precio ($)"], errors='coerce')
             resumen = df_temp.groupby("Tipo de Lavado")["Precio ($)"].sum().reset_index()
             st.bar_chart(data=resumen, x="Tipo de Lavado", y="Precio ($)", use_container_width=True)
         else:
